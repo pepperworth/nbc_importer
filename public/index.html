@@ -78,11 +78,11 @@
             <div class="hint">F12 → Application → Cookies → niedersachsen.cloud → jwt</div>
           </div>
 
-          <!-- Quelle: URL-Tabs -->
+          <!-- Quelle: URL-Tabs (Bookmarklet-Tab nur im JWT-Modus) -->
         <div class="field" style="margin-top:16px;">
           <div class="tab-row" id="source-tabs" role="tablist" aria-label="Quelle auswählen">
-            <button type="button" class="tab-btn tab-active" role="tab" aria-selected="true" data-tab="url" id="tab-url">URL / Pull</button>
-            <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="bookmarklet" id="tab-bookmarklet">Bookmarklet / Push</button>
+            <button type="button" class="tab-btn tab-active" role="tab" aria-selected="true" data-tab="url" id="tab-url">URL</button>
+            <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="bookmarklet" id="tab-bookmarklet" style="display:none">Bookmarklet / Push</button>
           </div>
 
           <!-- URL-Tab -->
@@ -100,7 +100,7 @@
             </div>
           </div>
 
-          <!-- Bookmarklet-Tab -->
+          <!-- Bookmarklet-Tab (nur JWT-Modus) -->
           <div id="panel-bookmarklet" class="tab-panel hidden">
             <p class="small" style="margin:10px 0 6px;">
               Das Bookmarklet lädt das Board direkt im Browser und sendet es an diesen Server —
@@ -314,6 +314,13 @@
       var pillLabel = document.getElementById("auth-pill-label");
       if (pill) { pill.title = "Server-Auth (E-Mail/Passwort)"; pill.querySelector(".dot").textContent = "🔑"; }
       if (pillLabel) pillLabel.textContent = "Server-Auth";
+      // Hide bookmarklet tab — not useful without user-supplied JWT
+      var bmTab = document.getElementById("tab-bookmarklet");
+      if (bmTab) bmTab.style.display = "none";
+    } else {
+      // JWT mode: show bookmarklet tab
+      var bmTab = document.getElementById("tab-bookmarklet");
+      if (bmTab) bmTab.style.display = "";
     }
     updateSourceUI();
   }).catch(function() {});
