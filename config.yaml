@@ -1,0 +1,8 @@
+lint:
+  oversized_card_max_elements: 20
+  oversized_board_max_cards: 200
+  max_warnings: 50
+
+features:
+  board_ttl_days: 30
+  link_preview_enabled: true

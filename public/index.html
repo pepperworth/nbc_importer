@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Import · NBC nbc.almostready.dev</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=PT+Sans+Narrow:wght@400;700&family=PT+Sans:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/nbc-tools.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">NT</div>
+      <div class="brand-name">
+        NBC-Tools
+        <span>Import &amp; Migration</span>
+      </div>
+    </div>
+
+    <nav class="nav" aria-label="Hauptnavigation">
+      <div class="nav-section">Werkzeuge</div>
+      <a href="/" class="nav-item active">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span class="label">Import</span>
+      </a>
+    </nav>
+
+    <div class="legal">
+      <a href="https://niedersachsen.cloud" target="_blank" rel="noopener">Niedersachsen-Cloud</a>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <nav class="crumbs" aria-label="Brotkrumen">
+      <b>NBC-Tools</b>
+      <span>·</span><span>Import</span>
+    </nav>
+    <div class="topbar-actions">
+      <div class="school-pill" title="Auth via JWT">
+        <span class="dot">JWT</span>
+        Niedersachsen-Cloud
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="page-h">
+      <div>
+        <h1 class="narrow">Neuer Import</h1>
+        <p class="lead">In drei Schritten ein öffentliches Board in die NBC übernehmen.</p>
+      </div>
+    </div>
+
+    <form id="import-form" class="wizard" novalidate>
+      <div id="error-alert" class="alert alert-error hidden" role="alert"></div>
+
+      <!-- Step 1: Quelle -->
+      <section id="step1" class="step-card step-active" data-step="1">
+        <div class="step-header" data-toggle-step="1">
+          <div class="step-number">1</div>
+          <div class="step-title-text">Quelle</div>
+          <div class="step-status" data-step-status="1"></div>
+        </div>
+        <div class="step-body">
+          <div class="field">
+            <label for="jwt">JWT-Token</label>
+            <input type="text" id="jwt" class="input mono" placeholder="eyJ..."
+                   autocomplete="off" spellcheck="false">
+            <div class="hint">F12 → Application → Cookies → niedersachsen.cloud → jwt</div>
+          </div>
+
+          <!-- Quelle: URL-Tabs -->
+        <div class="field" style="margin-top:16px;">
+          <div class="tab-row" id="source-tabs" role="tablist" aria-label="Quelle auswählen">
+            <button type="button" class="tab-btn tab-active" role="tab" aria-selected="true" data-tab="url" id="tab-url">URL / Pull</button>
+            <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="bookmarklet" id="tab-bookmarklet">Bookmarklet / Push</button>
+          </div>
+
+          <!-- URL-Tab -->
+          <div id="panel-url" class="tab-panel">
+            <label for="source_url" style="margin-top:10px;display:block;">Board-URL</label>
+            <input
+              type="url"
+              id="source_url"
+              class="input"
+              placeholder="https://www.edumaps.de/… oder https://www.taskcards.de/… oder https://padlet.com/…"
+              autocomplete="url"
+              value="">
+            <div class="row gap-8" style="min-height: 22px; margin-top: 4px;">
+              <span id="source-detect" class="chip hidden" aria-live="polite"></span>
+            </div>
+          </div>
+
+          <!-- Bookmarklet-Tab -->
+          <div id="panel-bookmarklet" class="tab-panel hidden">
+            <p class="small" style="margin:10px 0 6px;">
+              Das Bookmarklet lädt das Board direkt im Browser und sendet es an diesen Server —
+              nützlich bei Boards, die nur nach Login zugänglich sind.
+            </p>
+            <div class="field" style="margin-top:8px;">
+              <strong>Taskcards-Bookmarklet</strong><br>
+              <a id="tc-bookmarklet-link" class="btn btn-sm btn-outline" style="margin-top:6px;display:inline-block;" href="#">In Lesezeichenleiste ziehen</a>
+              <div class="hint">Auf einem Taskcards-Board öffnen, Bookmarklet anklicken, JWT eingeben.</div>
+            </div>
+          </div>
+        </div>
+
+          <div class="step-actions js-only">
+            <span></span>
+            <button type="button" class="btn btn-primary" data-go-next="2" id="btn-step1-next" disabled>
+              Weiter
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div class="step-connector js-only" data-connector="1"></div>
+
+      <!-- Step 2: Optionen -->
+      <section id="step2" class="step-card step-pending" data-step="2">
+        <div class="step-header" data-toggle-step="2">
+          <div class="step-number">2</div>
+          <div class="step-title-text">Optionen</div>
+          <div class="step-status" data-step-status="2"></div>
+        </div>
+        <div class="step-body">
+          <label id="edumaps-colors-toggle" class="toggle hidden">
+            <input type="checkbox" id="chk-import-colors">
+            <span class="switch" aria-hidden="true"></span>
+            <span class="label-block">
+              <span class="title">Karten-Farben übernehmen</span>
+              <span class="hint">Edumaps färbt nur den Titel-Streifen, NBC die ganze Karte — Mapping perzeptuell, nicht 1:1.</span>
+            </span>
+          </label>
+
+          <label id="edumaps-omit-warnings-toggle" class="toggle hidden">
+            <input type="checkbox" id="chk-omit-warnings">
+            <span class="switch" aria-hidden="true"></span>
+            <span class="label-block">
+              <span class="title">Platzhalter für nicht abbildbare Module weglassen</span>
+              <span class="hint">Edumaps-Quizze, Umfragen, Countdowns &amp; Co. haben kein NBC-Pendant. Standardmäßig steht dort eine Hinweis-Zeile — abschalten, wenn die Karte stattdessen leer bleiben soll.</span>
+            </span>
+          </label>
+
+          <label id="summary-toggle" class="toggle">
+            <input type="checkbox" id="chk-summary-card">
+            <span class="switch" aria-hidden="true"></span>
+            <span class="label-block">
+              <span class="title">Meta-Spalte „Über diesen Bereich" voranstellen</span>
+              <span class="hint">Setzt vorne eine zusätzliche Spalte mit Quelle, Beschreibung, Etherpad-Hinweisen und Hinweis auf weggelassene Inhalte.</span>
+            </span>
+          </label>
+
+          <hr style="border:0;border-top:1px solid var(--border-soft);margin:10px 0 6px;">
+
+          <div class="field" style="margin-top:8px;">
+            <label for="import-file">Oder: JSON-Datei hochladen</label>
+            <input type="file" id="import-file" accept=".json" class="input" style="padding:8px;">
+            <div class="hint">Falls kein URL-Import: mit dem Tampermonkey-Userscript erzeugtes JSON.</div>
+          </div>
+
+          <div class="step-actions" style="margin-top:18px;">
+            <button type="button" class="btn btn-outline js-only" data-go-back="1">← Zurück</button>
+            <button type="submit" class="btn btn-primary" id="btn-start-import">
+              Import starten
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div class="step-connector js-only" data-connector="2"></div>
+
+      <!-- Step 3: Import & Status -->
+      <section id="step3" class="step-card step-pending js-only" data-step="3">
+        <div class="step-header" data-toggle-step="3">
+          <div class="step-number">3</div>
+          <div class="step-title-text">Import &amp; Status</div>
+          <div class="step-status" data-step-status="3"></div>
+        </div>
+        <div class="step-body">
+          <div class="row gap-8" style="margin-bottom: 12px; flex-wrap: wrap;">
+            <span id="job-id-chip" class="chip mono chip-grey hidden"
+                  style="max-width: 100%; word-break: break-all; white-space: normal;"></span>
+            <span id="status-chip" class="chip dot chip-blue hidden">Läuft …</span>
+          </div>
+
+          <div id="progress-bar" class="bar indet hidden" style="margin-bottom: 14px;">
+            <i></i>
+          </div>
+
+          <div id="log" class="log" role="log" aria-live="polite" aria-label="Import-Log"></div>
+
+          <div id="done-block" class="hidden" style="margin-top: 16px;">
+            <h4 class="narrow">Teilen-Link</h4>
+            <div class="share-url" style="margin-top: 8px;">
+              <a id="share-url-link" href="#" target="_blank" rel="noopener"></a>
+              <button type="button" class="btn btn-sm btn-outline copy-btn" id="copy-share">Kopieren</button>
+            </div>
+            <div id="room-link-row" class="hidden" style="margin-top:8px;">
+              <span class="small soft">Raum-Link (intern):</span>
+              <a id="room-url-link" href="#" target="_blank" rel="noopener" class="small mono" style="margin-left:6px;"></a>
+            </div>
+            <div id="summary-block" class="stack gap-6 mt-4 small"></div>
+            <div class="step-actions" style="margin-top: 18px;">
+              <button type="button" class="btn btn-outline" id="btn-reset">Weiteren Import starten</button>
+              <span></span>
+            </div>
+          </div>
+
+          <div id="error-block" class="hidden" style="margin-top: 16px;">
+            <div class="alert alert-error">
+              <strong>Fehler:</strong> <span id="error-message"></span>
+            </div>
+            <div class="step-actions" style="margin-top: 14px;">
+              <button type="button" class="btn btn-outline" data-go-back="1">← Zurück zur Quelle</button>
+              <span></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </form>
+
+    <noscript>
+      <p class="small soft mt-4" style="max-width: 760px;">
+        Ohne JavaScript wird der Wizard klassisch abgeschickt.
+      </p>
+    </noscript>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var SOURCES = [
+    { id: "taskcards", host: /(^|\.)taskcards\.de$/i,             label: "Taskcards", chip: "chip-orange" },
+    { id: "padlet",    host: /(^|\.)(padlet\.com|padlet\.org)$/i, label: "Padlet",    chip: "chip-blue" },
+    { id: "edumaps",   host: /(^|\.)edumaps\.de$/i,               label: "Edumaps",   chip: "chip-teal" },
+  ];
+
+  // Bookmarklet setup
+  (function() {
+    var link = document.getElementById("tc-bookmarklet-link");
+    if (!link) return;
+    var bmCode = "(function(){var s=document.createElement('script');s.src='/bookmarklets/taskcards.js?v=1';document.head.appendChild(s);})();";
+    link.href = "javascript:" + bmCode;
+    link.setAttribute("draggable", "true");
+  })();
+
+  // Source tab switching
+  (function() {
+    var tabs = document.querySelectorAll(".tab-btn");
+    tabs.forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        tabs.forEach(function(t) { t.classList.remove("tab-active"); t.setAttribute("aria-selected","false"); });
+        btn.classList.add("tab-active");
+        btn.setAttribute("aria-selected","true");
+        document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.add("hidden"); });
+        var panel = document.getElementById("panel-" + btn.dataset.tab);
+        if (panel) panel.classList.remove("hidden");
+        updateSourceUI();
+      });
+    });
+  })();
+
+  var form        = document.getElementById("import-form");
+  var urlInput    = document.getElementById("source_url");
+  var jwtInput    = document.getElementById("jwt");
+  var fileInput   = document.getElementById("import-file");
+  var sourceChip  = document.getElementById("source-detect");
+  var colorToggle = document.getElementById("edumaps-colors-toggle");
+  var colorChk    = document.getElementById("chk-import-colors");
+  var omitToggle  = document.getElementById("edumaps-omit-warnings-toggle");
+  var omitChk     = document.getElementById("chk-omit-warnings");
+  var summaryChk  = document.getElementById("chk-summary-card");
+  var btnNext1    = document.getElementById("btn-step1-next");
+  var btnReset    = document.getElementById("btn-reset");
+  var errorAlert  = document.getElementById("error-alert");
+
+  var logEl       = document.getElementById("log");
+  var progress    = document.getElementById("progress-bar");
+  var statusChip  = document.getElementById("status-chip");
+  var jobChip     = document.getElementById("job-id-chip");
+  var doneBlock   = document.getElementById("done-block");
+  var errorBlock  = document.getElementById("error-block");
+  var errorMsg    = document.getElementById("error-message");
+  var shareLink   = document.getElementById("share-url-link");
+  var roomLinkRow = document.getElementById("room-link-row");
+  var roomLink    = document.getElementById("room-url-link");
+  var copyBtn     = document.getElementById("copy-share");
+  var summaryBlk  = document.getElementById("summary-block");
+
+  // Load saved JWT
+  var savedJwt = localStorage.getItem("nbc_jwt") || "";
+  if (savedJwt) jwtInput.value = savedJwt;
+
+  function detectSource(value) {
+    var url;
+    try { url = new URL(value); } catch { return null; }
+    if (url.protocol !== "https:") return null;
+    for (var i = 0; i < SOURCES.length; i++) {
+      if (SOURCES[i].host.test(url.hostname)) return SOURCES[i];
+    }
+    return null;
+  }
+
+  function updateSourceUI() {
+    var v = urlInput.value.trim();
+    var m = v ? detectSource(v) : null;
+
+    if (!v) {
+      sourceChip.className = "chip hidden";
+      sourceChip.textContent = "";
+    } else if (m) {
+      sourceChip.className = "chip dot " + m.chip;
+      sourceChip.textContent = "Erkannt: " + m.label;
+    } else {
+      sourceChip.className = "chip chip-grey";
+      sourceChip.textContent = "Quelle wird beim Absenden geprüft";
+    }
+
+    var isEdumaps = !!(m && m.id === "edumaps");
+    var toggles = [[colorToggle, colorChk], [omitToggle, omitChk]];
+    for (var i = 0; i < toggles.length; i++) {
+      var wrap = toggles[i][0], chk = toggles[i][1];
+      if (isEdumaps) { wrap.classList.remove("hidden"); }
+      else { wrap.classList.add("hidden"); chk.checked = false; }
+    }
+
+    var activeTab = document.querySelector(".tab-btn.tab-active");
+    var isBookmarkletTab = activeTab && activeTab.dataset.tab === "bookmarklet";
+    btnNext1.disabled = isBookmarkletTab ? !jwtInput.value.trim() : (!v || !jwtInput.value.trim());
+  }
+
+  urlInput.addEventListener("input", updateSourceUI);
+  jwtInput.addEventListener("input", updateSourceUI);
+  updateSourceUI();
+
+  // --- Step-Navigation ---
+  var currentStep = 1;
+  var TOTAL_STEPS = 3;
+
+  function getCard(n)      { return document.getElementById("step" + n); }
+  function getConnector(n) { return document.querySelector('[data-connector="' + n + '"]'); }
+  function getStatusEl(n)  { return document.querySelector('[data-step-status="' + n + '"]'); }
+
+  function setStepStatus(n, text) {
+    var el = getStatusEl(n);
+    if (el) el.textContent = text || "";
+  }
+
+  function setStepState(n, state) {
+    var card = getCard(n);
+    if (!card) return;
+    card.classList.remove("step-pending", "step-active", "step-done", "step-expanded");
+    card.classList.add("step-" + state);
+
+    var conn = getConnector(n);
+    if (conn) {
+      conn.classList.remove("step-connector-active", "step-connector-done");
+      if (state === "done") conn.classList.add("step-connector-done");
+      else if (state === "active") conn.classList.add("step-connector-active");
+    }
+  }
+
+  function goToStep(n) {
+    if (n < 1 || n > TOTAL_STEPS) return;
+    currentStep = n;
+    for (var i = 1; i <= TOTAL_STEPS; i++) {
+      if (i < n) setStepState(i, "done");
+      else if (i === n) setStepState(i, "active");
+      else setStepState(i, "pending");
+    }
+    if (n > 1) {
+      var conn = getConnector(n - 1);
+      if (conn) {
+        conn.classList.remove("step-connector-active");
+        conn.classList.add("step-connector-done");
+      }
+    }
+    var card = getCard(n);
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  document.querySelectorAll("[data-toggle-step]").forEach(function(h) {
+    h.addEventListener("click", function() {
+      var card = h.closest(".step-card");
+      if (card.classList.contains("step-done")) {
+        card.classList.toggle("step-expanded");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-go-next]").forEach(function(b) {
+    b.addEventListener("click", function() { goToStep(parseInt(b.dataset.goNext, 10)); });
+  });
+  document.querySelectorAll("[data-go-back]").forEach(function(b) {
+    b.addEventListener("click", function() {
+      resetStep3UI();
+      goToStep(parseInt(b.dataset.goBack, 10));
+    });
+  });
+
+  // --- Import starten ---
+  function fmtTime(ts) {
+    var d = ts ? new Date(ts * 1000) : new Date();
+    return [d.getHours(), d.getMinutes(), d.getSeconds()]
+      .map(function(x) { return String(x).padStart(2, "0"); }).join(":");
+  }
+
+  function appendLine(level, msg, ts) {
+    var line = document.createElement("div");
+    line.className = "log-line log-" + level;
+    var t = document.createElement("span"); t.className = "ts"; t.textContent = fmtTime(ts);
+    var l = document.createElement("span"); l.className = "lvl";
+    var m = document.createElement("span"); m.className = "msg"; m.textContent = msg;
+    line.append(t, l, m);
+    logEl.appendChild(line);
+    var nearBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 60;
+    if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setStatusChip(label, chipClass) {
+    statusChip.className = "chip dot " + chipClass;
+    statusChip.textContent = label;
+    statusChip.classList.remove("hidden");
+  }
+
+  function resetStep3UI() {
+    logEl.innerHTML = "";
+    progress.classList.add("hidden");
+    statusChip.classList.add("hidden");
+    jobChip.classList.add("hidden");
+    doneBlock.classList.add("hidden");
+    errorBlock.classList.add("hidden");
+    roomLinkRow.classList.add("hidden");
+    summaryBlk.innerHTML = "";
+  }
+
+  var activeStream = null;
+
+  async function startImport() {
+    resetStep3UI();
+    errorAlert.classList.add("hidden");
+    goToStep(3);
+
+    var jwt = jwtInput.value.trim();
+    if (!jwt) {
+      showError("JWT-Token fehlt.");
+      return;
+    }
+    localStorage.setItem("nbc_jwt", jwt);
+
+    setStepStatus(2, "Optionen übernommen");
+    setStepStatus(3, "Wird gestartet …");
+    progress.classList.remove("hidden");
+    setStatusChip("Wird gestartet …", "chip-blue");
+
+    var hasFile = fileInput.files && fileInput.files.length > 0;
+    var activeTab = document.querySelector(".tab-btn.tab-active");
+    var isBookmarkletTab = activeTab && activeTab.dataset.tab === "bookmarklet";
+
+    if (isBookmarkletTab) {
+      showError("Bitte das Bookmarklet auf dem jeweiligen Board ausführen, nicht hier.");
+      return;
+    } else if (hasFile) {
+      startFileImport(jwt);
+    } else {
+      startUrlImport(jwt);
+    }
+  }
+
+  async function startUrlImport(jwt) {
+    var payload = {
+      jwt: jwt,
+      sourceUrl: urlInput.value.trim(),
+      importColors: !!colorChk.checked,
+      omitWidgetWarnings: !!omitChk.checked,
+      addSummaryCard: !!summaryChk.checked,
+    };
+
+    var job;
+    try {
+      var res = await fetch("/api/import/url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      var body = await res.json().catch(function() { return {}; });
+      if (!res.ok) {
+        showError(body.error || ("Fehler " + res.status));
+        return;
+      }
+      job = body;
+    } catch (e) {
+      showError("Netzwerkfehler: " + (e && e.message ? e.message : e));
+      return;
+    }
+
+    try {
+      history.replaceState({ jobId: job.jobId }, "", "/?job=" + encodeURIComponent(job.jobId));
+    } catch (_) {}
+
+    attachStream(job.jobId);
+  }
+
+  async function startFileImport(jwt) {
+    var formData = new FormData();
+    formData.append("jwt", jwt);
+    formData.append("file", fileInput.files[0]);
+    if (colorChk.checked) formData.append("importColors", "1");
+    if (omitChk.checked) formData.append("omitWidgetWarnings", "1");
+    if (summaryChk.checked) formData.append("addSummaryCard", "1");
+
+    var job;
+    try {
+      var res = await fetch("/api/import", {
+        method: "POST",
+        body: formData,
+      });
+      var body = await res.json().catch(function() { return {}; });
+      if (!res.ok) {
+        showError(body.error || ("Fehler " + res.status));
+        return;
+      }
+      job = body;
+    } catch (e) {
+      showError("Netzwerkfehler: " + (e && e.message ? e.message : e));
+      return;
+    }
+
+    try {
+      history.replaceState({ jobId: job.jobId }, "", "/?job=" + encodeURIComponent(job.jobId));
+    } catch (_) {}
+
+    attachStream(job.jobId);
+  }
+
+  function attachStream(jobId) {
+    jobChip.textContent = jobId;
+    jobChip.classList.remove("hidden");
+    setStatusChip("Läuft …", "chip-blue");
+    setStepStatus(3, "Läuft …");
+    progress.classList.remove("hidden");
+
+    if (typeof EventSource === "undefined") {
+      appendLine("info", "Live-Updates nicht unterstützt.", null);
+      return;
+    }
+    activeStream = new EventSource("/api/import/" + encodeURIComponent(jobId) + "/stream");
+    activeStream.onmessage = function(ev) {
+      var data;
+      try { data = JSON.parse(ev.data); } catch { return; }
+      if (data.type === "log") {
+        appendLine(data.level || "info", data.msg || "", data.ts);
+      } else if (data.type === "done") {
+        finishImport(jobId, data);
+      } else if (data.type === "error") {
+        showError(data.msg || "Unbekannter Fehler.");
+      }
+    };
+    activeStream.onerror = function() {
+      setStepStatus(3, "Verbindung instabil");
+    };
+  }
+
+  function finishImport(jobId, data) {
+    if (activeStream) { activeStream.close(); activeStream = null; }
+    progress.classList.add("hidden");
+    setStatusChip("Fertig", "chip-green");
+    setStepStatus(3, "Fertig");
+
+    if (data.shareUrl) {
+      shareLink.href = data.shareUrl;
+      shareLink.textContent = data.shareUrl;
+    } else {
+      shareLink.parentElement.style.display = "none";
+    }
+
+    if (data.roomUrl) {
+      roomLinkRow.classList.remove("hidden");
+      roomLink.href = data.roomUrl;
+      roomLink.textContent = data.roomUrl;
+    }
+
+    doneBlock.classList.remove("hidden");
+    renderSummary(data.summary);
+  }
+
+  function renderSummary(s) {
+    if (!s) return;
+    var lines = [];
+    lines.push("<div><strong>Was importiert wurde</strong></div>");
+    if (s.cards !== undefined) {
+      lines.push("<div>" + s.cards + " " + (s.cards === 1 ? "Karte" : "Karten") +
+                 " in " + s.columns + " " + (s.columns === 1 ? "Spalte" : "Spalten") + ".</div>");
+    }
+    if (s.files) {
+      lines.push("<div>" + s.files + " " + (s.files === 1 ? "Datei" : "Dateien") + " hochgeladen.</div>");
+    }
+    if (s.links) {
+      lines.push("<div>" + s.links + " " + (s.links === 1 ? "Link" : "Links") + ".</div>");
+    }
+    summaryBlk.innerHTML = lines.join("");
+  }
+
+  function showError(msg) {
+    if (activeStream) { activeStream.close(); activeStream = null; }
+    progress.classList.add("hidden");
+    setStatusChip("Fehlgeschlagen", "chip-red");
+    setStepStatus(3, "Fehlgeschlagen");
+    errorMsg.textContent = msg;
+    errorBlock.classList.remove("hidden");
+  }
+
+  form.addEventListener("submit", function(ev) {
+    ev.preventDefault();
+    if (!jwtInput.value.trim()) {
+      jwtInput.focus();
+      return;
+    }
+    if (!urlInput.value.trim() && (!fileInput.files || !fileInput.files.length)) {
+      urlInput.focus();
+      return;
+    }
+    startImport();
+  });
+
+  if (btnReset) {
+    btnReset.addEventListener("click", function() {
+      if (activeStream) { activeStream.close(); activeStream = null; }
+      try { history.replaceState({}, "", "/"); } catch (_) {}
+      resetStep3UI();
+      urlInput.value = "";
+      fileInput.value = "";
+      colorChk.checked = false;
+      omitChk.checked = false;
+      summaryChk.checked = false;
+      updateSourceUI();
+      goToStep(1);
+      urlInput.focus();
+    });
+  }
+
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async function() {
+      try {
+        await navigator.clipboard.writeText(shareLink.href);
+        copyBtn.textContent = "Kopiert!";
+        setTimeout(function() { copyBtn.textContent = "Kopieren"; }, 1500);
+      } catch (_) {}
+    });
+  }
+
+  document.body.dataset.js = "on";
+
+  var params = new URLSearchParams(location.search);
+  var reconnectId = params.get("job");
+  if (reconnectId) {
+    attachToExistingJob(reconnectId);
+  } else {
+    goToStep(1);
+  }
+
+  async function attachToExistingJob(jobId) {
+    goToStep(3);
+    setStepState(1, "done"); setStepStatus(1, "übernommen");
+    setStepState(2, "done"); setStepStatus(2, "übernommen");
+
+    jobChip.textContent = jobId;
+    jobChip.classList.remove("hidden");
+    setStatusChip("Verbinde …", "chip-blue");
+    progress.classList.remove("hidden");
+
+    attachStream(jobId);
+  }
+})();
+</script>
+</body>
+</html>

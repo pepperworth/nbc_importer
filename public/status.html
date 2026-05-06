@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Status · NBC-Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=PT+Sans+Narrow:wght@400;700&family=PT+Sans:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/nbc-tools.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">NT</div>
+      <div class="brand-name">
+        NBC-Tools
+        <span>Import &amp; Migration</span>
+      </div>
+    </div>
+    <nav class="nav" aria-label="Hauptnavigation">
+      <div class="nav-section">Werkzeuge</div>
+      <a href="/" class="nav-item">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span class="label">Import</span>
+      </a>
+    </nav>
+    <div class="legal">
+      <a href="https://niedersachsen.cloud" target="_blank" rel="noopener">Niedersachsen-Cloud</a>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <nav class="crumbs" aria-label="Brotkrumen">
+      <b>NBC-Tools</b>
+      <span>·</span><a href="/">Import</a><span>·</span><span>Status</span>
+    </nav>
+    <div class="topbar-actions">
+      <div class="school-pill" title="Auth via JWT">
+        <span class="dot">JWT</span>
+        Niedersachsen-Cloud
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="page-h">
+      <div>
+        <div class="row gap-8 small soft" style="margin-bottom:8px;">
+          <a href="/">← Neuer Import</a>
+        </div>
+        <h1 class="narrow" id="page-title">Import läuft</h1>
+        <div class="row gap-8 mt-2">
+          <span class="chip mono chip-grey" id="job-id-chip"></span>
+          <span id="status-chip" class="chip dot chip-blue">Läuft …</span>
+        </div>
+      </div>
+    </div>
+
+    <section class="card" style="max-width: 960px;">
+      <div class="card-h">
+        <h3>Live-Log</h3>
+        <span class="xs soft" id="log-meta">Verbinde …</span>
+      </div>
+      <div class="card-pad">
+        <div id="progress-bar" class="bar indet" style="margin-bottom: 14px;">
+          <i></i>
+        </div>
+        <div id="log" class="log" role="log" aria-live="polite" aria-label="Import-Log"></div>
+      </div>
+    </section>
+
+    <section id="done-card" class="card card-pad mt-4 hidden" style="max-width: 960px;">
+      <h3 class="narrow mb-2">Teilen-Link</h3>
+      <div class="share-url">
+        <a id="share-url-link" href="#" target="_blank" rel="noopener"></a>
+        <button type="button" class="btn btn-sm btn-outline copy-btn" id="copy-share">Kopieren</button>
+      </div>
+      <div id="room-link-row" class="hidden" style="margin-top:8px;">
+        <span class="small soft">Raum-Link (intern):</span>
+        <a id="room-url-link" href="#" target="_blank" rel="noopener" class="small mono" style="margin-left:6px;"></a>
+      </div>
+      <div id="summary-block" class="stack gap-6 mt-4 small"></div>
+    </section>
+
+    <section id="error-card" class="card card-pad mt-4 hidden" style="max-width: 960px;">
+      <div class="alert alert-error" role="alert">
+        <strong>Fehler:</strong> <span id="error-message"></span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  var jobId = new URLSearchParams(location.search).get("job") || location.pathname.split("/").pop();
+  document.getElementById("job-id-chip").textContent = jobId;
+
+  var logEl    = document.getElementById("log");
+  var meta     = document.getElementById("log-meta");
+  var chip     = document.getElementById("status-chip");
+  var titleEl  = document.getElementById("page-title");
+  var progress = document.getElementById("progress-bar");
+  var doneCard = document.getElementById("done-card");
+  var errorCard = document.getElementById("error-card");
+  var errorMsg  = document.getElementById("error-message");
+  var shareLink = document.getElementById("share-url-link");
+  var roomLinkRow = document.getElementById("room-link-row");
+  var roomLink = document.getElementById("room-url-link");
+  var copyBtn  = document.getElementById("copy-share");
+  var summaryBlk = document.getElementById("summary-block");
+
+  function setStatus(status) {
+    var map = {
+      running: { label: "Läuft …",         chip: "chip-blue" },
+      done:    { label: "Fertig",           chip: "chip-green" },
+      error:   { label: "Fehlgeschlagen",   chip: "chip-red" },
+    };
+    var b = map[status] || { label: status, chip: "chip-grey" };
+    chip.className = "chip dot " + b.chip;
+    chip.textContent = b.label;
+    if (status === "done") {
+      titleEl.textContent = "Import abgeschlossen";
+      progress.classList.add("hidden");
+    } else if (status === "error") {
+      titleEl.textContent = "Import fehlgeschlagen";
+      progress.classList.add("hidden");
+    } else {
+      titleEl.textContent = "Import läuft";
+      progress.classList.remove("hidden");
+    }
+  }
+
+  function fmtTime(ts) {
+    var d = ts ? new Date(ts * 1000) : new Date();
+    return [d.getHours(), d.getMinutes(), d.getSeconds()]
+      .map(function(x) { return String(x).padStart(2, "0"); }).join(":");
+  }
+
+  function appendLine(level, msg, ts) {
+    var line = document.createElement("div");
+    line.className = "log-line log-" + level;
+    var t = document.createElement("span"); t.className = "ts"; t.textContent = fmtTime(ts);
+    var l = document.createElement("span"); l.className = "lvl";
+    var m = document.createElement("span"); m.className = "msg"; m.textContent = msg;
+    line.append(t, l, m);
+    logEl.appendChild(line);
+    var nearBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 60;
+    if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function renderSummary(s) {
+    if (!s) return;
+    var lines = [];
+    lines.push("<div><strong>Was importiert wurde</strong></div>");
+    if (s.cards !== undefined) {
+      lines.push("<div>" + s.cards + " " + (s.cards === 1 ? "Karte" : "Karten") +
+                 " in " + s.columns + " " + (s.columns === 1 ? "Spalte" : "Spalten") + ".</div>");
+    }
+    if (s.files) lines.push("<div>" + s.files + " " + (s.files === 1 ? "Datei" : "Dateien") + " hochgeladen.</div>");
+    if (s.links) lines.push("<div>" + s.links + " " + (s.links === 1 ? "Link" : "Links") + ".</div>");
+    summaryBlk.innerHTML = lines.join("");
+  }
+
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async function() {
+      try {
+        await navigator.clipboard.writeText(shareLink.href);
+        copyBtn.textContent = "Kopiert!";
+        setTimeout(function() { copyBtn.textContent = "Kopieren"; }, 1500);
+      } catch (_) {}
+    });
+  }
+
+  if (typeof EventSource === "undefined") {
+    meta.textContent = "Live-Updates nicht unterstützt — bitte neu laden.";
+    return;
+  }
+
+  var es = new EventSource("/api/import/" + encodeURIComponent(jobId) + "/stream");
+  meta.textContent = "Verbunden.";
+
+  es.onmessage = function(ev) {
+    var data;
+    try { data = JSON.parse(ev.data); } catch { return; }
+    if (data.type === "log") {
+      appendLine(data.level || "info", data.msg || "", data.ts);
+    } else if (data.type === "done") {
+      setStatus("done");
+      if (data.shareUrl) {
+        shareLink.href = data.shareUrl;
+        shareLink.textContent = data.shareUrl;
+      }
+      if (data.roomUrl) {
+        roomLinkRow.classList.remove("hidden");
+        roomLink.href = data.roomUrl;
+        roomLink.textContent = data.roomUrl;
+      }
+      doneCard.classList.remove("hidden");
+      renderSummary(data.summary);
+      meta.textContent = "Fertig.";
+      es.close();
+    } else if (data.type === "error") {
+      setStatus("error");
+      errorMsg.textContent = data.msg || "Unbekannter Fehler.";
+      errorCard.classList.remove("hidden");
+      meta.textContent = "Fehlgeschlagen.";
+      es.close();
+    }
+  };
+
+  es.onerror = function() {
+    meta.textContent = "Verbindung verloren — versuche neu zu laden.";
+  };
+})();
+</script>
+</body>
+</html>
