@@ -11,4 +11,12 @@ features:
 # auth.mode: 'password' → Server logs in with NBC_EMAIL + NBC_PASSWORD from .env
 #                         JWT field is hidden in the UI; no credentials are exposed to users
 auth:
-  mode: jwt
+  mode: password
+  #mode: jwt
+
+# nbc.ablage_room_id: ID of the room in the service account where boards are stored.
+# Required when auth.mode is 'password'. Leave empty in jwt mode.
+nbc:
+  ablage_room_id: "69e87c6ebe6ff28eaad9ea1f"
+  
+  

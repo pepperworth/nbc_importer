@@ -36,6 +36,13 @@ export function isFeatureEnabled(name) {
   return !!(load()?.features?.[name]);
 }
 
+// ID of the fixed "Ablage-Raum" in the service account.
+// When set, boards are created directly inside this room (no new room per import).
+// Only used in password mode; ignored in jwt mode.
+export function getAblageRoomId() {
+  return load()?.nbc?.ablage_room_id || '';
+}
+
 // Returns 'jwt' (default, prod) or 'password' (staging — server logs in).
 export function getAuthMode() {
   return load()?.auth?.mode === 'password' ? 'password' : 'jwt';

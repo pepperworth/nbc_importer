@@ -1,39 +1,36 @@
 import {
   apiRequest, setLinkContent, uploadFile, createShareToken,
-  parseDataUrl, downloadFileForUpload, NBC_ORIGIN, BASE_URL,
+  parseDataUrl, downloadFileForUpload, NBC_ORIGIN,
 } from './client.js';
-
-// Build share-import URL from the configured base (works for prod + staging)
-function buildShareUrl(token) {
-  return `${NBC_ORIGIN}/rooms?import=${token}&importedType=columnBoard`;
-}
 import { renderQrCodesInline } from '../importers/edumaps.js';
+import { getAblageRoomId } from '../config.js';
 
 const WIDGET_WARNING_MARKER = '⚠️ Edumaps-Element';
 
 function countWidgetWarnings(columns) {
   let count = 0;
-  for (const col of columns) {
-    for (const card of col.cards) {
-      for (const el of (card.elements || [])) {
+  for (const col of columns)
+    for (const card of col.cards)
+      for (const el of (card.elements || []))
         if (el.type === 'richText' && (el.text || '').includes(WIDGET_WARNING_MARKER)) count++;
-      }
-    }
-  }
   return count;
 }
 
 function stripWidgetWarnings(columns) {
   let removed = 0;
-  for (const col of columns) {
+  for (const col of columns)
     for (const card of col.cards) {
       card.elements = (card.elements || []).filter(el => {
         if (el.type === 'richText' && (el.text || '').includes(WIDGET_WARNING_MARKER)) { removed++; return false; }
         return true;
       });
     }
-  }
   return removed;
+}
+
+function nbc_title(s, fallback = 'Import') {
+  const t = (s || '').trim().slice(0, 100);
+  return t || fallback;
 }
 
 export async function exportBoard(jwt, schoolId, board, logger, options = {}) {
@@ -49,12 +46,29 @@ export async function exportBoard(jwt, schoolId, board, logger, options = {}) {
     if (removed > 0) { logger.info(`${removed} Platzhalter-Hinweise zu nicht abbildbaren Modulen entfernt.`); warningCount = 0; }
   }
 
-  logger.info('Room wird erstellt...');
-  const room = await apiRequest(jwt, 'POST', '/rooms', { name: board.title, color: 'blue-grey', features: [] });
-  logger.ok(`✓ Room erstellt: ${room.id}`);
+  // --- Ablage-Raum-Modus: Board direkt im konfigurierten Ablage-Raum anlegen ---
+  // In password mode a fixed shared room (ablage_room_id) is used so no new
+  // room is created per import — only the board is shared.
+  const ablageRoomId = getAblageRoomId();
+  let parentId, parentType, roomId;
+
+  if (ablageRoomId) {
+    parentId = ablageRoomId;
+    parentType = 'room';
+    roomId = ablageRoomId;
+    logger.info(`Ablage-Raum: ${ablageRoomId}`);
+  } else {
+    // JWT-Modus Fallback: eigenen Raum pro Import anlegen
+    logger.info('Room wird erstellt...');
+    const room = await apiRequest(jwt, 'POST', '/rooms', { name: nbc_title(board.title), color: 'blue-grey', features: [] });
+    parentId = room.id;
+    parentType = 'room';
+    roomId = room.id;
+    logger.ok(`✓ Room erstellt: ${room.id}`);
+  }
 
   const nbcBoard = await apiRequest(jwt, 'POST', '/boards', {
-    title: board.title, parentId: room.id, parentType: 'room', layout: board.layout || 'columns',
+    title: nbc_title(board.title), parentId, parentType, layout: board.layout || 'columns',
   });
   logger.ok(`✓ Board erstellt: ${nbcBoard.id}`);
 
@@ -67,12 +81,12 @@ export async function exportBoard(jwt, schoolId, board, logger, options = {}) {
   for (const [ci, col] of board.columns.entries()) {
     logger.step(`[${ci + 1}/${totalColCount}] Spalte "${col.title}"`);
     const column = await apiRequest(jwt, 'POST', `/boards/${nbcBoard.id}/columns`);
-    await apiRequest(jwt, 'PATCH', `/columns/${column.id}/title`, { title: col.title || '' });
+    await apiRequest(jwt, 'PATCH', `/columns/${column.id}/title`, { title: nbc_title(col.title, '') });
     totalColumns++;
 
     for (const card of col.cards) {
       const cardRes = await apiRequest(jwt, 'POST', `/columns/${column.id}/cards`);
-      await apiRequest(jwt, 'PATCH', `/cards/${cardRes.id}/title`, { title: card.title || '' });
+      await apiRequest(jwt, 'PATCH', `/cards/${cardRes.id}/title`, { title: nbc_title(card.title, '') });
       logger.info(`  Karte "${card.title || '(ohne Titel)'}"`);
 
       if (importColors && card.backgroundColor && card.backgroundColor !== 'transparent') {
@@ -120,10 +134,11 @@ export async function exportBoard(jwt, schoolId, board, logger, options = {}) {
     }
   }
 
+  // Share the board (columnBoard), not the room
   let shareToken = null, shareExpiresAt = null;
   try {
     logger.info('Share-Link wird erstellt...');
-    const share = await createShareToken(jwt, room.id);
+    const share = await createShareToken(jwt, nbcBoard.id, 'columnBoard');
     shareToken = share.token;
     shareExpiresAt = share.expiresAt || null;
     const note = shareExpiresAt ? ` (gültig bis ${new Date(shareExpiresAt).toLocaleString('de-DE')})` : '';
@@ -132,13 +147,14 @@ export async function exportBoard(jwt, schoolId, board, logger, options = {}) {
     logger.err(`Share-Link konnte nicht erstellt werden: ${err.message}`);
   }
 
-  const roomUrl = `${NBC_ORIGIN}/rooms/${room.id}`;
-  const shareUrl = shareToken ? buildShareUrl(shareToken) : null;
+  const shareUrl = shareToken ? `${NBC_ORIGIN}/rooms?import=${shareToken}&importedType=columnBoard` : null;
+  // Room URL only makes sense when we created our own room (JWT mode)
+  const roomUrl = ablageRoomId ? null : `${NBC_ORIGIN}/rooms/${roomId}`;
   const totalCards = board.columns.reduce((s, c) => s + c.cards.length, 0);
-  logger.ok(`✓ Fertig! ${shareUrl || roomUrl}`);
+  logger.ok(`✓ Fertig! ${shareUrl || roomUrl || nbcBoard.id}`);
 
   return {
-    roomId: room.id, boardId: nbcBoard.id,
+    roomId, boardId: nbcBoard.id,
     shareToken, shareExpiresAt, roomUrl, shareUrl,
     summary: { columns: totalColumns, cards: totalCards, files: totalFiles, links: totalLinks },
   };
