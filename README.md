@@ -22,7 +22,9 @@ Nach dem Import erhält man einen **Teilen-Link** (Board-Import, `columnBoard`),
 
 ## Auth-Modi
 
-Das Tool unterstützt zwei Auth-Modi, einstellbar in `config.yaml`:
+Das Tool unterstützt zwei Auth-Modi, einstellbar in `config.yaml`.
+
+**Aktuell aktiv: `password`-Modus** (Staging-Instanz unter nbc.almostready.dev). JWT-Modus ist deaktiviert.
 
 ### `auth.mode: jwt` (Produktionsmodus, Standard)
 
