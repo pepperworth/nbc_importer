@@ -1,7 +1,12 @@
 import {
   apiRequest, setLinkContent, uploadFile, createShareToken,
-  parseDataUrl, downloadFileForUpload, NBC_ORIGIN,
+  parseDataUrl, downloadFileForUpload, NBC_ORIGIN, BASE_URL,
 } from './client.js';
+
+// Build share-import URL from the configured base (works for prod + staging)
+function buildShareUrl(token) {
+  return `${NBC_ORIGIN}/rooms?import=${token}&importedType=columnBoard`;
+}
 import { renderQrCodesInline } from '../importers/edumaps.js';
 
 const WIDGET_WARNING_MARKER = '⚠️ Edumaps-Element';
@@ -128,9 +133,9 @@ export async function exportBoard(jwt, schoolId, board, logger, options = {}) {
   }
 
   const roomUrl = `${NBC_ORIGIN}/rooms/${room.id}`;
-  const shareUrl = shareToken ? `${NBC_ORIGIN}/rooms?import=${shareToken}&importedType=room` : null;
+  const shareUrl = shareToken ? buildShareUrl(shareToken) : null;
   const totalCards = board.columns.reduce((s, c) => s + c.cards.length, 0);
-  logger.ok(`✓ Fertig! ${roomUrl}`);
+  logger.ok(`✓ Fertig! ${shareUrl || roomUrl}`);
 
   return {
     roomId: room.id, boardId: nbcBoard.id,

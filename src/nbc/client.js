@@ -3,6 +3,9 @@ import FormData from 'form-data';
 
 const BASE_URL = process.env.NBC_BASE_URL || 'https://niedersachsen.cloud/api/v3';
 
+// Derive the web origin from BASE_URL (strip /api/v3 suffix)
+const NBC_ORIGIN = BASE_URL.replace(/\/api\/v3\/?$/, '');
+
 export async function apiRequest(jwt, method, path, body) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -53,8 +56,6 @@ export function parseDataUrl(dataUrl) {
   if (!match) throw new Error('Ungültiges data:-URL-Format');
   return { mimeType: match[1], buffer: Buffer.from(match[2], 'base64') };
 }
-
-const NBC_ORIGIN = 'https://niedersachsen.cloud';
 
 export async function downloadFileForUpload(sourceUrl, logger) {
   const SSRF_SAFE = /^https:\/\//i;
