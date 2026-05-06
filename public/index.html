@@ -45,9 +45,9 @@
       <span>·</span><span>Import</span>
     </nav>
     <div class="topbar-actions">
-      <div class="school-pill" title="Auth via JWT">
+      <div class="school-pill" id="auth-pill" title="Authentifizierung">
         <span class="dot">JWT</span>
-        Niedersachsen-Cloud
+        <span id="auth-pill-label">Niedersachsen-Cloud</span>
       </div>
     </div>
   </header>
@@ -71,7 +71,7 @@
           <div class="step-status" data-step-status="1"></div>
         </div>
         <div class="step-body">
-          <div class="field">
+          <div class="field" id="jwt-field">
             <label for="jwt">JWT-Token</label>
             <input type="text" id="jwt" class="input mono" placeholder="eyJ..."
                    autocomplete="off" spellcheck="false">
@@ -279,6 +279,7 @@
   var form        = document.getElementById("import-form");
   var urlInput    = document.getElementById("source_url");
   var jwtInput    = document.getElementById("jwt");
+  var jwtField    = document.getElementById("jwt-field");
   var fileInput   = document.getElementById("import-file");
   var sourceChip  = document.getElementById("source-detect");
   var colorToggle = document.getElementById("edumaps-colors-toggle");
@@ -303,7 +304,21 @@
   var copyBtn     = document.getElementById("copy-share");
   var summaryBlk  = document.getElementById("summary-block");
 
-  // Load saved JWT
+  // Auth mode: 'jwt' (default, user supplies token) or 'password' (server handles auth)
+  var AUTH_MODE = "jwt";
+  fetch("/api/config").then(function(r) { return r.json(); }).then(function(cfg) {
+    AUTH_MODE = cfg.authMode || "jwt";
+    if (AUTH_MODE === "password") {
+      if (jwtField) jwtField.classList.add("hidden");
+      var pill = document.getElementById("auth-pill");
+      var pillLabel = document.getElementById("auth-pill-label");
+      if (pill) { pill.title = "Server-Auth (E-Mail/Passwort)"; pill.querySelector(".dot").textContent = "🔑"; }
+      if (pillLabel) pillLabel.textContent = "Server-Auth";
+    }
+    updateSourceUI();
+  }).catch(function() {});
+
+  // Load saved JWT (only relevant in jwt mode)
   var savedJwt = localStorage.getItem("nbc_jwt") || "";
   if (savedJwt) jwtInput.value = savedJwt;
 
@@ -342,7 +357,8 @@
 
     var activeTab = document.querySelector(".tab-btn.tab-active");
     var isBookmarkletTab = activeTab && activeTab.dataset.tab === "bookmarklet";
-    btnNext1.disabled = isBookmarkletTab ? !jwtInput.value.trim() : (!v || !jwtInput.value.trim());
+    var jwtOk = AUTH_MODE === "password" || !!jwtInput.value.trim();
+    btnNext1.disabled = isBookmarkletTab ? !jwtOk : (!v || !jwtOk);
   }
 
   urlInput.addEventListener("input", updateSourceUI);
@@ -458,11 +474,11 @@
     goToStep(3);
 
     var jwt = jwtInput.value.trim();
-    if (!jwt) {
+    if (AUTH_MODE === "jwt" && !jwt) {
       showError("JWT-Token fehlt.");
       return;
     }
-    localStorage.setItem("nbc_jwt", jwt);
+    if (AUTH_MODE === "jwt") localStorage.setItem("nbc_jwt", jwt);
 
     setStepStatus(2, "Optionen übernommen");
     setStepStatus(3, "Wird gestartet …");
@@ -485,12 +501,12 @@
 
   async function startUrlImport(jwt) {
     var payload = {
-      jwt: jwt,
       sourceUrl: urlInput.value.trim(),
       importColors: !!colorChk.checked,
       omitWidgetWarnings: !!omitChk.checked,
       addSummaryCard: !!summaryChk.checked,
     };
+    if (AUTH_MODE === "jwt" && jwt) payload.jwt = jwt;
 
     var job;
     try {
@@ -519,7 +535,7 @@
 
   async function startFileImport(jwt) {
     var formData = new FormData();
-    formData.append("jwt", jwt);
+    if (AUTH_MODE === "jwt" && jwt) formData.append("jwt", jwt);
     formData.append("file", fileInput.files[0]);
     if (colorChk.checked) formData.append("importColors", "1");
     if (omitChk.checked) formData.append("omitWidgetWarnings", "1");
@@ -628,7 +644,7 @@
 
   form.addEventListener("submit", function(ev) {
     ev.preventDefault();
-    if (!jwtInput.value.trim()) {
+    if (AUTH_MODE === "jwt" && !jwtInput.value.trim()) {
       jwtInput.focus();
       return;
     }

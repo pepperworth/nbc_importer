@@ -13,7 +13,8 @@ import { applyMetaColumn } from './src/nbc/meta-column.js';
 import { exportBoard } from './src/nbc/exporter.js';
 import { renderQrCodesInline } from './src/importers/edumaps.js';
 import { edumapsExportToIntermediate } from './src/importers/edumaps.js';
-import { getLintConfig } from './src/config.js';
+import { getLintConfig, getAuthMode, getAuthCredentials } from './src/config.js';
+import { NBCSession, AuthError } from './src/nbc/session.js';
 import {
   createJob, getJob, updateJobStatus, appendJobLog, appendJobWarnings,
   addListener, removeListener, emitToListeners,
@@ -27,7 +28,24 @@ const upload = multer({ storage: memoryStorage(), limits: { fileSize: 50 * 1024 
 
 app.use(express.static(join(__dirname, 'public')));
 
-// --- Auth helpers ---
+// --- Auth ---
+const AUTH_MODE = getAuthMode();
+
+// Singleton session for password mode — created lazily so startup doesn't fail
+// if credentials are not set.
+let _nbcSession = null;
+function getNbcSession() {
+  if (_nbcSession) return _nbcSession;
+  const { email, password } = getAuthCredentials();
+  if (!email || !password) throw Object.assign(
+    new Error('NBC_EMAIL / NBC_PASSWORD nicht konfiguriert (auth.mode: password).'),
+    { status: 500 },
+  );
+  const baseUrl = process.env.NBC_BASE_URL || 'https://niedersachsen.cloud/api/v3';
+  _nbcSession = new NBCSession({ baseUrl, email, password });
+  return _nbcSession;
+}
+
 function parseJwt(token) {
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Ungültiger JWT');
@@ -35,7 +53,11 @@ function parseJwt(token) {
 }
 
 function extractSchoolId(payload) {
-  return payload.schoolId || payload.school || payload.schoolid || '';
+  if (!payload || typeof payload !== 'object') return '';
+  if (typeof payload.schoolId === 'string' && payload.schoolId) return payload.schoolId;
+  if (typeof payload.school === 'string' && payload.school) return payload.school;
+  if (typeof payload.schoolid === 'string' && payload.schoolid) return payload.schoolid;
+  return '';
 }
 
 function validateJwt(raw) {
@@ -50,6 +72,17 @@ function validateJwt(raw) {
   const schoolId = extractSchoolId(payload);
   if (!schoolId) throw Object.assign(new Error('schoolId nicht im JWT gefunden'), { status: 400 });
   return { jwt, schoolId };
+}
+
+// Returns auth info for a route: either validates user-supplied JWT (jwt mode)
+// or returns a session marker (password mode).
+async function resolveAuth(reqJwt) {
+  if (AUTH_MODE === 'password') {
+    // Validate session is configured; return marker — actual token fetched in runJob.
+    getNbcSession(); // throws if not configured
+    return { authMode: 'password' };
+  }
+  return { authMode: 'jwt', ...validateJwt(reqJwt) };
 }
 
 // --- CORS for push endpoints ---
@@ -104,7 +137,20 @@ async function runJob(jobId) {
 
   try {
     const data = job.data;
-    const { jwt, schoolId, options } = data;
+    const { options } = data;
+
+    // Resolve jwt + schoolId: for password mode, get fresh session token now.
+    let jwt, schoolId;
+    if (data.authMode === 'password') {
+      const session = getNbcSession();
+      jwt = await session.getToken();
+      const payload = parseJwt(jwt);
+      schoolId = extractSchoolId(payload);
+      if (!schoolId) throw new Error('schoolId konnte nicht aus Session-Token gelesen werden.');
+    } else {
+      jwt = data.jwt;
+      schoolId = data.schoolId;
+    }
 
     let board;
 
@@ -117,7 +163,6 @@ async function runJob(jobId) {
       if (!importer) throw new Error(`Unbekannter Importer: ${data.importerName}`);
       board = importer.parsePush(data.payload);
     } else if (data.jobType === 'file') {
-      // Edumaps JSON upload — convert old format to IntermediateBoard
       const raw = data.payload;
       if (!raw.boardTitle || !raw.columns) throw new Error('Kein gültiges Edumaps-Export-Format');
       board = edumapsExportToIntermediate(raw, raw.sourceUrl || '');
@@ -125,26 +170,21 @@ async function runJob(jobId) {
       throw new Error(`Unbekannter Job-Typ: ${data.jobType}`);
     }
 
-    // Render QR codes if still present (edumaps URL pull does it, file upload may not)
     if (data.jobType === 'file') {
       await renderQrCodesInline(board.columns, logger);
     }
 
-    // Pipeline
     const cfg = getLintConfig();
     const warnings = await runPipeline(board, logger, cfg);
     appendJobWarnings(jobId, warnings);
 
-    // Count dropped widgets before stripping
     const droppedWidgetCount = countDroppedWidgets(board.columns);
 
-    // Meta column (replaces old "addSummaryCard")
     if (options.addSummaryCard) {
       const added = applyMetaColumn(board, { enabled: true, droppedWidgetCount });
       if (added) logger.info('Meta-Spalte „Über diesen Bereich" vorangestellt.');
     }
 
-    // Export
     const result = await exportBoard(jwt, schoolId, board, logger, {
       importColors: !!options.importColors,
       omitWidgetWarnings: !!options.omitWidgetWarnings,
@@ -176,8 +216,9 @@ function countDroppedWidgets(columns) {
 app.get('/', (_req, res) => res.sendFile(join(__dirname, 'public', 'index.html')));
 app.get('/status/:jobId', (_req, res) => res.sendFile(join(__dirname, 'public', 'status.html')));
 
-// --- Health ---
+// --- Health + Config ---
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+app.get('/api/config', (_req, res) => res.json({ authMode: AUTH_MODE }));
 
 // --- API: Job status ---
 app.get('/api/status/:jobId', (req, res) => {
@@ -198,7 +239,7 @@ app.get('/api/status/:jobId', (req, res) => {
 // --- API: URL Import (Edumaps, Taskcards, Padlet) ---
 app.post('/api/import/url', async (req, res) => {
   try {
-    const { jwt, schoolId } = validateJwt(req.body.jwt);
+    const auth = await resolveAuth(req.body.jwt);
     const url = (req.body.sourceUrl || req.body.edumapsUrl || '').trim();
     if (!url) return res.status(400).json({ error: 'URL fehlt' });
     if (!findImporter(url)) {
@@ -206,7 +247,7 @@ app.post('/api/import/url', async (req, res) => {
     }
     const jobId = newJobId();
     createJob(jobId, 'url', {
-      jobType: 'url', jwt, schoolId, url,
+      jobType: 'url', ...auth, url,
       options: {
         importColors: makeBoolOpt(req.body.importColors),
         omitWidgetWarnings: makeBoolOpt(req.body.omitWidgetWarnings),
@@ -222,14 +263,14 @@ app.post('/api/import/url', async (req, res) => {
 // --- API: File Upload Import (Edumaps JSON) ---
 app.post('/api/import', upload.single('file'), async (req, res) => {
   try {
-    const { jwt, schoolId } = validateJwt(req.body.jwt);
+    const auth = await resolveAuth(req.body.jwt);
     if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
     let payload;
     try { payload = JSON.parse(req.file.buffer.toString('utf-8')); }
     catch { return res.status(400).json({ error: 'JSON konnte nicht geparst werden' }); }
     const jobId = newJobId();
     createJob(jobId, 'file', {
-      jobType: 'file', jwt, schoolId, payload,
+      jobType: 'file', ...auth, payload,
       options: {
         importColors: makeBoolOpt(req.body.importColors),
         omitWidgetWarnings: makeBoolOpt(req.body.omitWidgetWarnings),
@@ -246,14 +287,14 @@ app.post('/api/import', upload.single('file'), async (req, res) => {
 app.options('/api/ingest/edumaps', corsForOrigins(EDUMAPS_ORIGINS));
 app.post('/api/ingest/edumaps', corsForOrigins(EDUMAPS_ORIGINS), express.json({ limit: '10mb' }), async (req, res) => {
   try {
-    const { jwt, schoolId } = validateJwt(req.body.jwt);
+    const auth = await resolveAuth(req.body.jwt);
     const payload = req.body.payload;
     if (!payload?.columns || !payload?.boardTitle) {
       return res.status(400).json({ error: 'Payload muss ein Edumaps-Export-JSON sein.' });
     }
     const jobId = newJobId();
     createJob(jobId, 'push', {
-      jobType: 'push', importerName: 'edumaps', jwt, schoolId, payload,
+      jobType: 'push', importerName: 'edumaps', ...auth, payload,
       options: {
         importColors: !!req.body.importColors,
         omitWidgetWarnings: !!req.body.omitWidgetWarnings,
@@ -271,12 +312,12 @@ app.post('/api/ingest/edumaps', corsForOrigins(EDUMAPS_ORIGINS), express.json({ 
 app.options('/api/ingest/taskcards', corsForOrigins(TASKCARDS_ORIGINS));
 app.post('/api/ingest/taskcards', corsForOrigins(TASKCARDS_ORIGINS), express.json({ limit: '10mb' }), async (req, res) => {
   try {
-    const { jwt, schoolId } = validateJwt(req.body.jwt);
+    const auth = await resolveAuth(req.body.jwt);
     const payload = req.body.payload;
     if (!payload) return res.status(400).json({ error: 'Payload fehlt' });
     const jobId = newJobId();
     createJob(jobId, 'push', {
-      jobType: 'push', importerName: 'taskcards', jwt, schoolId, payload,
+      jobType: 'push', importerName: 'taskcards', ...auth, payload,
       options: {
         importColors: false,
         omitWidgetWarnings: false,
@@ -303,10 +344,8 @@ app.get('/api/import/:jobId/stream', (req, res) => {
 
   const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
-  // Replay stored log
   for (const e of (job.log || [])) send(e);
 
-  // If already done/error, close immediately after replay
   if (job.status === 'done' || job.status === 'error') return res.end();
 
   addListener(req.params.jobId, send);
@@ -321,6 +360,6 @@ app.get('/api/import/:jobId/stream', (req, res) => {
 // --- Start ---
 const PORT = parseInt(process.env.PORT || '3010', 10);
 app.listen(PORT, '127.0.0.1', () => {
-  console.log(`NBC Import Server läuft auf Port ${PORT}`);
+  console.log(`NBC Import Server läuft auf Port ${PORT} (auth.mode: ${AUTH_MODE})`);
   scheduleCleanup();
 });

@@ -6,3 +6,9 @@ lint:
 features:
   board_ttl_days: 30
   link_preview_enabled: true
+
+# auth.mode: 'jwt'      → User pastes their own JWT (production default)
+# auth.mode: 'password' → Server logs in with NBC_EMAIL + NBC_PASSWORD from .env
+#                         JWT field is hidden in the UI; no credentials are exposed to users
+auth:
+  mode: jwt
