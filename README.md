@@ -1,93 +1,156 @@
-# edumaps-import
+# nbc-import
 
-Tool zum Importieren von Edumaps-Boards als neue Räume + Boards auf `niedersachsen.cloud`. Besteht aus:
+Web-Tool zum Importieren öffentlicher Boards aus Edumaps, Taskcards und Padlet in die Niedersachsen-Cloud (NBC). Betrieben unter [nbc.almostready.dev](https://nbc.almostready.dev).
 
-- **Web-UI** unter [nbc.almostready.dev](https://nbc.almostready.dev) — JWT eintragen, entweder Edumaps-URL einfügen **oder** JSON-Datei hochladen, fertig
-- **CLI** für lokale/automatisierte Läufe
-- **Tampermonkey-Userscript** (`edumaps_export.js`) zum Erzeugen der Export-JSON aus Edumaps
+## Funktionsweise
 
-Nach erfolgreichem Import erhält man zwei Links:
-- **Raum-Link** — intern, nur für Raum-Mitglieder
-- **Share-Link** — öffentlich, per `POST /api/v3/sharetoken` erstellt (gültig ca. 21 Tage)
+Der Import läuft in drei Schritten:
 
-## Web-UI: zwei Wege zum Import
+1. **Quelle** — Board-URL eingeben (Edumaps, Taskcards oder Padlet)
+2. **Optionen** — Farben übernehmen, Meta-Spalte aktivieren, Platzhalter-Hinweise ausblenden
+3. **Import** — Server-seitiger Job mit Live-Log via SSE
 
-1. **Edumaps-URL** einfügen (empfohlen, nur öffentliche Boards) — der Server lädt das HTML direkt per HTTP, parst es mit `linkedom` (kein Headless-Chrome) und folgt Redirects nur innerhalb von `edumaps.de` (SSRF-Schutz).
-2. **JSON-Datei** hochladen (klassisch) — zuvor mit dem Tampermonkey-Userscript erzeugt, funktioniert auch für nicht-öffentliche Boards.
+Nach dem Import erhält man einen **Teilen-Link** (Board-Import, `columnBoard`), über den das fertige Board in eine NBC-Instanz übernommen werden kann.
 
-Die Parser-Logik liegt als Canonical-Quelle in [edumaps-parser.js](edumaps-parser.js) und ist mit `edumaps_export.js` (Tampermonkey) inhaltlich gespiegelt — bei Änderungen **beide** pflegen.
+## Quellen
 
-## JWT holen
+| Quelle | Modus | Anmerkungen |
+|--------|-------|-------------|
+| **Edumaps** | URL-Pull | Nur öffentliche Boards; HTML-Fetch + linkedom-Parser |
+| **Taskcards** | URL-Pull | GraphQL-API; nur öffentliche Boards |
+| **Padlet** | URL-Pull | HTML + JSON-API; nur öffentliche Boards |
 
-`F12 → Application → Storage → Cookies → https://niedersachsen.cloud → jwt → Value kopieren`
+## Auth-Modi
 
-Das Tool prüft die Gültigkeit und liest `schoolId` automatisch aus dem JWT-Payload.
+Das Tool unterstützt zwei Auth-Modi, einstellbar in `config.yaml`:
 
-## CLI
+### `auth.mode: jwt` (Produktionsmodus, Standard)
 
-### Setup
+Der Nutzer gibt seinen eigenen NBC-JWT ein (aus DevTools → Cookies → `jwt`). Das Tool importiert das Board unter dem Account des Nutzers.
+
+```yaml
+auth:
+  mode: jwt
+```
+
+### `auth.mode: password` (Staging-/Server-Modus)
+
+Der Server logt sich mit einem festen Service-Account ein (`NBC_EMAIL` / `NBC_PASSWORD` in `.env`). Das JWT-Feld ist in der UI ausgeblendet — Nutzer brauchen keinen NBC-Account. Alle Boards landen in einem konfigurierten Ablage-Raum (`nbc.ablage_room_id`).
+
+```yaml
+auth:
+  mode: password
+
+nbc:
+  ablage_room_id: "60abc123..."  # Raum-ID im Service-Account
+```
+
+```env
+NBC_EMAIL=importer@schule.de
+NBC_PASSWORD=geheimesPasswort
+```
+
+## Pipeline-Stages
+
+Nach dem Fetch läuft jedes Board durch drei Stages:
+
+| Stage | Was passiert |
+|-------|-------------|
+| `normalize-card-colors` | Hex-Farben aus der Quelle werden via CIE-Lab-Nearest-Neighbor auf NBC-Farben gemappt |
+| `link-preview` | OG/Twitter-Metadaten für Link-Elemente werden nachgeladen (Concurrency 5, SSRF-Guard) |
+| `board-lint` | Strukturwarnungen: leere Karten, fehlende Titel, Duplikate, überdimensionierte Boards |
+
+## Meta-Spalte
+
+Optional wird eine Spalte „Über diesen Bereich" vorangestellt mit:
+- Karte mit Quell-URL und Beschreibung
+- Karte mit gefundenen Etherpad-Links
+- Karte mit Hinweis auf weggelassene Inhalte (nicht importierbare Widgets)
+
+## Jobpersistenz
+
+Jobs werden in SQLite gespeichert (`data/jobs.sqlite`). Der SSE-Live-Log wird in der DB gehalten und bei Reconnect vollständig wiedergegeben — Jobs überleben Server-Neustarts.
+
+## Setup (lokal / eigene Instanz)
 
 ```bash
-cd tools/edumaps-import
 npm install
 cp .env.example .env
-# .env befüllen: NBC_JWT=ey...
+# .env befüllen (s.u.)
+node server.js
 ```
 
-### Verwendung
+### `.env`
+
+```env
+# NBC API-Endpunkt (Standard: Produktion)
+NBC_BASE_URL=https://niedersachsen.cloud/api/v3
+
+# Port (Standard: 3010)
+PORT=3010
+
+# Nur bei auth.mode: password
+# NBC_EMAIL=importer@schule.de
+# NBC_PASSWORD=geheimesPasswort
+```
+
+### `config.yaml`
+
+```yaml
+lint:
+  oversized_card_max_elements: 20
+  oversized_board_max_cards: 200
+  max_warnings: 50
+
+features:
+  board_ttl_days: 30
+  link_preview_enabled: true
+
+auth:
+  mode: jwt          # oder: password
+
+nbc:
+  ablage_room_id: "" # Nur bei auth.mode: password
+```
+
+## Deployment
+
+Der Server wird per `rsync` + `systemctl restart` deployed. `deploy.sh` liegt lokal und ist nicht im Repository (enthält Server-Adresse). Neues Deployment:
 
 ```bash
-# Dry-Run (kein Netzwerk, nur Validierung)
-npm run import -- --json ../../edumaps-export.json --dry-run
-
-# Echter Import — erstellt neuen Raum + Board + Share-Link
-npm run import -- --json ../../edumaps-export.json
+rsync -av --exclude='node_modules' --exclude='.git' --exclude='data' --exclude='.env' \
+  ./ root@server:/opt/nbc-import/
+ssh root@server "cd /opt/nbc-import && npm install --omit=dev && systemctl restart nbc-import"
 ```
 
-### Optionen
+## Architektur
 
-| Flag | Beschreibung |
-|---|---|
-| `--json <path>` | Pfad zur Edumaps-Export-JSON (erforderlich) |
-| `--room-id <id>` | In bestehenden Raum importieren (sonst wird ein neuer erstellt) |
-| `--school-id <id>` | School-ID (wird normalerweise aus JWT gelesen) |
-| `--base-url <url>` | NBC API Base-URL (Standard: `https://niedersachsen.cloud/api/v3`) |
-| `--dry-run` | Kein Netzwerk — Validierung + Ausgabe geplanter Schritte |
-| `--import-colors` | Karten-Farben aus Edumaps übernehmen (Default aus). Edumaps färbt nur den Titel-Streifen, NBC die ganze Karte — visuell anders. Bei `transparent`-/Weiß-Karten wird sowieso nichts gesetzt. |
-
-## Was wird importiert?
-
-- Board mit Titel aus dem Export
-- Alle Spalten mit ihren Titeln
-- Alle Karten mit ihren Titeln
-- Elemente in der richtigen Reihenfolge:
-  - `text` → richText-Element (HTML 1:1)
-  - `file` → Upload + Caption
-  - `link` → Link-Element mit URL + Titel
-
-Nicht unterstützt: `drawing`, `videoConference`, `externalTool` — das Tool bricht mit einer Fehlermeldung ab.
-
-## Edumaps Export (Tampermonkey)
-
-`edumaps_export.js` ist ein Tampermonkey-Userscript, das den Export direkt aus der Edumaps-Oberfläche ermöglicht.
-
-### Installation
-
-1. [Tampermonkey](https://www.tampermonkey.net/) im Browser installieren
-2. Neues Skript anlegen und den Inhalt von `edumaps_export.js` einfügen
-3. Speichern
-
-### Verwendung
-
-1. Auf `app.edumaps.de` ein Board öffnen (Pinboard, Timeline oder Stickerwall)
-2. Oben rechts erscheint ein **"Edumaps exportieren"**-Button
-3. Klicken → das Skript lädt alle Medien als base64 herunter und speichert die JSON-Datei
-4. Die JSON-Datei kann direkt in das Import-Tool (CLI oder Web-UI auf [nbc.almostready.dev](https://nbc.almostready.dev)) geladen werden
-
-Bei Bedarf gibt es auch einen **"Debug"**-Button, der die geparste Struktur in der Konsole ausgibt.
-
-## Server-seitige Dependencies
-
-Der URL-Modus nutzt einen direkten HTTP-Request statt Headless-Chrome — Edumaps liefert das Board server-seitig als HTML aus, ein einfacher `fetch` reicht. `linkedom` parst das HTML in eine DOM-API, gegen die derselbe Code wie im Tampermonkey-Userscript läuft.
-
-Keine zusätzlichen Systempakete nötig. Das Deploy-Skript (`deploy.sh`) überträgt `package.json` + `edumaps-parser.js` und führt anschließend `npm install --omit=dev` auf dem Server aus.
+```
+server.js                  Express-Server, Routes, SSE, Job-Runner
+src/
+  importers/
+    registry.js            findImporter(url) / findImporterByName(name)
+    edumaps.js             HTML-Fetch + linkedom-Parser
+    taskcards.js           GraphQL-Pull
+    padlet.js              HTML + JSON-API
+  pipeline/
+    runner.js              Sequenzielle Stage-Ausführung
+    colors.js              CIE-Lab Hex→NBC-Farb-Mapping
+    stages/
+      normalize-card-colors.js
+      link-preview.js
+      board-lint.js
+  nbc/
+    client.js              NBC API-Wrapper (fetch + SSRF-Guard)
+    session.js             NBCSession — Login, Token-Refresh, Retry
+    exporter.js            IntermediateBoard → NBC Room/Board/Cards/Elements
+    meta-column.js         „Über diesen Bereich"-Spalte
+  jobs/
+    store.js               SQLite-Jobs (better-sqlite3, WAL)
+    cleanup.js             Täglicher TTL-Sweep
+  config.js                config.yaml + .env Loader
+config.yaml                Lint-Schwellen, Auth-Modus, Ablage-Raum
+public/
+  index.html               Wizard-UI (3 Steps, SSE-Live-Log)
+  status.html              Job-Status-Seite
+```

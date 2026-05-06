@@ -164,14 +164,6 @@
             </span>
           </label>
 
-          <hr style="border:0;border-top:1px solid var(--border-soft);margin:10px 0 6px;">
-
-          <div class="field" style="margin-top:8px;">
-            <label for="import-file">Oder: JSON-Datei hochladen</label>
-            <input type="file" id="import-file" accept=".json" class="input" style="padding:8px;">
-            <div class="hint">Falls kein URL-Import: mit dem Tampermonkey-Userscript erzeugtes JSON.</div>
-          </div>
-
           <div class="step-actions" style="margin-top:18px;">
             <button type="button" class="btn btn-outline js-only" data-go-back="1">← Zurück</button>
             <button type="submit" class="btn btn-primary" id="btn-start-import">
@@ -280,7 +272,6 @@
   var urlInput    = document.getElementById("source_url");
   var jwtInput    = document.getElementById("jwt");
   var jwtField    = document.getElementById("jwt-field");
-  var fileInput   = document.getElementById("import-file");
   var sourceChip  = document.getElementById("source-detect");
   var colorToggle = document.getElementById("edumaps-colors-toggle");
   var colorChk    = document.getElementById("chk-import-colors");
@@ -492,15 +483,12 @@
     progress.classList.remove("hidden");
     setStatusChip("Wird gestartet …", "chip-blue");
 
-    var hasFile = fileInput.files && fileInput.files.length > 0;
     var activeTab = document.querySelector(".tab-btn.tab-active");
     var isBookmarkletTab = activeTab && activeTab.dataset.tab === "bookmarklet";
 
     if (isBookmarkletTab) {
       showError("Bitte das Bookmarklet auf dem jeweiligen Board ausführen, nicht hier.");
       return;
-    } else if (hasFile) {
-      startFileImport(jwt);
     } else {
       startUrlImport(jwt);
     }
@@ -521,38 +509,6 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
-      var body = await res.json().catch(function() { return {}; });
-      if (!res.ok) {
-        showError(body.error || ("Fehler " + res.status));
-        return;
-      }
-      job = body;
-    } catch (e) {
-      showError("Netzwerkfehler: " + (e && e.message ? e.message : e));
-      return;
-    }
-
-    try {
-      history.replaceState({ jobId: job.jobId }, "", "/?job=" + encodeURIComponent(job.jobId));
-    } catch (_) {}
-
-    attachStream(job.jobId);
-  }
-
-  async function startFileImport(jwt) {
-    var formData = new FormData();
-    if (AUTH_MODE === "jwt" && jwt) formData.append("jwt", jwt);
-    formData.append("file", fileInput.files[0]);
-    if (colorChk.checked) formData.append("importColors", "1");
-    if (omitChk.checked) formData.append("omitWidgetWarnings", "1");
-    if (summaryChk.checked) formData.append("addSummaryCard", "1");
-
-    var job;
-    try {
-      var res = await fetch("/api/import", {
-        method: "POST",
-        body: formData,
       });
       var body = await res.json().catch(function() { return {}; });
       if (!res.ok) {
@@ -655,7 +611,7 @@
       jwtInput.focus();
       return;
     }
-    if (!urlInput.value.trim() && (!fileInput.files || !fileInput.files.length)) {
+    if (!urlInput.value.trim()) {
       urlInput.focus();
       return;
     }
@@ -668,7 +624,6 @@
       try { history.replaceState({}, "", "/"); } catch (_) {}
       resetStep3UI();
       urlInput.value = "";
-      fileInput.value = "";
       colorChk.checked = false;
       omitChk.checked = false;
       summaryChk.checked = false;
