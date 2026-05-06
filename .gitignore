@@ -3,4 +3,5 @@ data/
 *.sqlite
 .env
 .deploy.env
+deploy.sh
 tsc.log
