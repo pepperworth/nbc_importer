@@ -114,17 +114,27 @@ function textExcerpt(value, length = 80) {
   return raw.slice(0, length);
 }
 
+function isTaskcardsHost(host) {
+  return host === 'taskcards.de' || host === 'taskcards.app' ||
+    host.endsWith('.taskcards.de') || host.endsWith('.taskcards.app');
+}
+
+function taskcardsBaseUrl(host) {
+  if (host === 'taskcards.de' || host === 'www.taskcards.de') return TASKCARDS_BASE_URL;
+  return `https://${host}`;
+}
+
 function parseBoardLink(url) {
   let parsed;
   try { parsed = new URL(url); } catch { return null; }
   const host = (parsed.hostname || '').toLowerCase();
-  if (host !== 'taskcards.de' && !host.endsWith('.taskcards.de')) return null;
+  if (!isTaskcardsHost(host)) return null;
   const candidates = [parsed.pathname, parsed.hash];
   for (const c of candidates) {
     const m = (c || '').match(/\/board\/([^/?#]+)/);
     if (m && UUID_RE.test(m[1])) {
       const token = new URLSearchParams(parsed.search).get('token') || '';
-      return { boardId: m[1], token };
+      return { boardId: m[1], token, baseUrl: taskcardsBaseUrl(host) };
     }
   }
   return null;
@@ -328,10 +338,10 @@ function normalizePayload(payload) {
   };
 }
 
-async function postGraphQL(payload, xToken) {
+async function postGraphQL(payload, xToken, graphqlUrl = TASKCARDS_GRAPHQL_URL) {
   const headers = { 'Content-Type': 'application/json' };
   if (xToken) headers['x-token'] = xToken;
-  const res = await fetch(TASKCARDS_GRAPHQL_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
+  const res = await fetch(graphqlUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
   if (res.status !== 200) throw new ImporterError(`Taskcards GraphQL antwortet mit HTTP ${res.status}.`);
   const data = await res.json();
   const errors = data.errors;
@@ -352,12 +362,13 @@ export class TaskcardsImporter extends BaseImporter {
     if (!boardLink) throw new ImporterError('Kein Taskcards-Board in der URL gefunden.');
     logger.step(`Lade Taskcards-Board: ${url}`);
 
-    const visitor = await postGraphQL({ query: 'mutation { createVisitor { id noActive } }' }, null);
+    const graphqlUrl = `${boardLink.baseUrl}/graphql`;
+    const visitor = await postGraphQL({ query: 'mutation { createVisitor { id noActive } }' }, null, graphqlUrl);
     const xToken = visitor?.data?.createVisitor?.id;
     if (!xToken) throw new ImporterError('Taskcards hat keinen Visitor-Token geliefert.');
 
     if (boardLink.token) {
-      const path = `${TASKCARDS_BASE_URL}/api/boards/${encodeURIComponent(boardLink.boardId)}/permissions/${encodeURIComponent(boardLink.token)}/accesses`;
+      const path = `${boardLink.baseUrl}/api/boards/${encodeURIComponent(boardLink.boardId)}/permissions/${encodeURIComponent(boardLink.token)}/accesses`;
       const r = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-token': xToken },
@@ -371,6 +382,7 @@ export class TaskcardsImporter extends BaseImporter {
     const payload = await postGraphQL(
       { operationName: null, variables: { id: boardLink.boardId }, query: BOARD_QUERY },
       xToken,
+      graphqlUrl,
     );
     payload.source_url = url;
     logger.info('Board wird geparst...');

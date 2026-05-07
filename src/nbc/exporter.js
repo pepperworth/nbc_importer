@@ -174,7 +174,7 @@ async function exportElement(el, elIdx, cardId, ctx) {
 
   } else if (el.type === 'link') {
     const elem = await apiRequest(jwt, 'POST', `/cards/${cardId}/elements`, { type: 'link', toPosition: elIdx });
-    await setLinkContent(jwt, elem.id, el.url, el.title || el.url, el.description || '');
+    await setLinkContent(jwt, elem.id, el.url, el.title || el.url, el.description || el.title || '');
     logger.info(`    ✓ Link "${el.url}"`);
 
   } else if (el.type === 'internalLink') {

@@ -87,7 +87,7 @@ async function resolveAuth(reqJwt) {
 
 // --- CORS for push endpoints ---
 const EDUMAPS_ORIGINS = new Set(['https://www.edumaps.de','https://edumaps.de','https://app.edumaps.de']);
-const TASKCARDS_ORIGINS = new Set(['https://www.taskcards.de','https://taskcards.de']);
+const TASKCARDS_ORIGINS = new Set(['https://www.taskcards.de','https://taskcards.de','https://www.taskcards.app','https://taskcards.app']);
 
 function corsForOrigins(allowed) {
   return (req, res, next) => {

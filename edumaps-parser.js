@@ -411,6 +411,25 @@ function hasInlineOnlyLinks(li) {
   return anchors.length === 1;
 }
 
+function cleanTextlineHtml(li) {
+  // Extrahiert innerHTML eines li.textline und behält nur href/title an <a>-Tags.
+  // Gibt '' zurück wenn der Inhalt leer/nur Whitespace ist.
+  let html = li.innerHTML || '';
+  // Strip <a> attributes except href and title
+  html = html.replace(/<a([^>]*)>/gi, (_, attrs) => {
+    const href = (attrs.match(/href="([^"]*)"/) || [])[1] || '';
+    const title = (attrs.match(/title="([^"]*)"/) || [])[1] || '';
+    let out = '<a';
+    if (href) out += ` href="${href}"`;
+    if (title) out += ` title="${title}"`;
+    return out + '>';
+  });
+  // Strip mapanchor spans
+  html = html.replace(/<span[^>]*class="mapanchor"[^>]*>.*?<\/span>/g, '').trim();
+  if (!html || html.replace(/\s/g, '') === '') return '';
+  return injectAnchorPlaceholders(html);
+}
+
 function extractTextContent(boxEl) {
   // Inhalt wird als (html, isBlock)-Paare gesammelt. Block-Elemente
   // (<table>, <blockquote>, Widget-Warnungen) dürfen laut HTML5-Spec nicht
@@ -453,6 +472,14 @@ function extractTextContent(boxEl) {
       let html = '<blockquote>' + bq.innerHTML.trim() + '</blockquote>';
       html = injectAnchorPlaceholders(html);
       parts.push({ html, isBlock: true });
+      return;
+    }
+
+    // textline: Fließtext direkt im <li> ohne .line-puretext-Wrapper,
+    // ggf. mit Inline-Links. <a>-Tags auf href/title reduzieren.
+    if ((li.getAttribute('class') || '').split(' ').includes('textline')) {
+      const inner = cleanTextlineHtml(li);
+      if (inner) parts.push({ html: inner, isBlock: false });
     }
   });
   if (!parts.length) return '';
@@ -477,6 +504,7 @@ function extractLinkElements(boxEl, startOrder) {
       return;
     }
     let title = (a.getAttribute('aria-label') || '').replace(/^Externen Link öffnen\s*[-–]\s*/i, '').trim();
+    if (/link\s+öffnet|externen?\s+link|neuem?\s+tab/i.test(title)) title = '';
     if (!title) title = a.textContent.replace(/\s+/g, ' ').trim();
     if (!title) title = href;
     elements.push({ order: order++, type: 'link', url: href, title, content: '🔗 ' + title });
@@ -579,20 +607,36 @@ function dedupeFirstCardTitle(cards, sourceWasFirstLabel) {
   return cards;
 }
 
+function getColumnTitle(pathCol) {
+  // Nur span.pathlabel für den Titel lesen — nicht das gesamte path-item,
+  // weil div.path-descr (Spalten-Kurzbeschreibung) sonst den Titel verfälscht.
+  const pathItem = pathCol.querySelector('.path-wrap .path-item') || pathCol.querySelector('.path-item');
+  if (pathItem) {
+    const pathlabel = pathItem.querySelector('span.pathlabel');
+    const title = pathlabel ? pathlabel.textContent.trim() : pathItem.textContent.trim();
+    const pathDescrEl = pathItem.querySelector('div.path-descr');
+    const pathDescr = pathDescrEl ? pathDescrEl.textContent.trim() : '';
+    if (title) return { title, fromPathItem: true, pathDescr };
+  }
+  const firstLabel = pathCol.querySelector('h3.boxlabel');
+  const firstLabelText = firstLabel ? firstLabel.textContent.trim() : '';
+  return { title: firstLabelText, fromPathItem: false, pathDescr: '' };
+}
+
 function parsePinboard(document, usedNames) {
   const boardTitle = getBoardTitle(document);
   const pathCols = document.querySelectorAll('.map-content-wrap .path-column');
   if (pathCols.length > 1) {
     const columns = [];
     pathCols.forEach((pathCol, idx) => {
-      const pathItem = pathCol.querySelector('.path-item');
-      const pathItemText = pathItem && pathItem.textContent ? pathItem.textContent.trim() : '';
-      const firstLabel = pathCol.querySelector('h3.boxlabel');
-      const firstLabelText = firstLabel ? firstLabel.textContent.trim() : '';
-      const colTitle = pathItemText || firstLabelText || 'Spalte ' + (idx + 1);
+      const { title: colTitleRaw, fromPathItem, pathDescr } = getColumnTitle(pathCol);
+      const colTitle = colTitleRaw || 'Spalte ' + (idx + 1);
       const boxEls = pathCol.querySelectorAll('.box-item');
       let cards = Array.from(boxEls).map(b => parseBox(b, usedNames)).filter(c => c.title || c.elements.length > 0);
-      cards = dedupeFirstCardTitle(cards, !pathItemText && !!firstLabelText);
+      cards = dedupeFirstCardTitle(cards, !fromPathItem && !!colTitleRaw);
+      if (pathDescr) {
+        cards = [{ title: '', elements: [{ order: 0, type: 'richText', text: '<p>' + pathDescr + '</p>' }], role: 'importer_description' }, ...cards];
+      }
       if (cards.length > 0) columns.push({ title: colTitle, cards });
     });
     if (columns.length > 0) return columns;
@@ -606,14 +650,14 @@ function parseTimeline(document, usedNames) {
   const pathCols = document.querySelectorAll('.path-column');
   const columns = [];
   pathCols.forEach((pathCol, idx) => {
-    const pathWrap = pathCol.querySelector('.path-wrap .path-item');
-    const pathItemText = pathWrap ? pathWrap.textContent.trim() : '';
-    const firstLabel = pathCol.querySelector('h3.boxlabel');
-    const firstLabelText = firstLabel ? firstLabel.textContent.trim() : '';
-    const colTitle = pathItemText || firstLabelText || 'Woche ' + (idx + 1);
+    const { title: colTitleRaw, fromPathItem, pathDescr } = getColumnTitle(pathCol);
+    const colTitle = colTitleRaw || 'Woche ' + (idx + 1);
     const boxEls = pathCol.querySelectorAll('.box-item');
     let cards = Array.from(boxEls).map(b => parseBox(b, usedNames)).filter(c => c.title || c.elements.length > 0);
-    cards = dedupeFirstCardTitle(cards, !pathItemText && !!firstLabelText);
+    cards = dedupeFirstCardTitle(cards, !fromPathItem && !!colTitleRaw);
+    if (pathDescr) {
+      cards = [{ title: '', elements: [{ order: 0, type: 'richText', text: '<p>' + pathDescr + '</p>' }], role: 'importer_description' }, ...cards];
+    }
     if (cards.length > 0) columns.push({ title: colTitle, cards });
   });
   if (columns.length === 0) return parsePinboard(document, usedNames);
@@ -625,14 +669,14 @@ function parseStickerwall(document, usedNames) {
   if (pathCols.length > 1) {
     const columns = [];
     pathCols.forEach((pathCol, idx) => {
-      const pathItem = pathCol.querySelector('.path-item');
-      const pathItemText = pathItem && pathItem.textContent ? pathItem.textContent.trim() : '';
-      const firstLabel = pathCol.querySelector('h3.boxlabel');
-      const firstLabelText = firstLabel ? firstLabel.textContent.trim() : '';
-      const colTitle = pathItemText || firstLabelText || 'Gruppe ' + (idx + 1);
+      const { title: colTitleRaw, fromPathItem, pathDescr } = getColumnTitle(pathCol);
+      const colTitle = colTitleRaw || 'Gruppe ' + (idx + 1);
       const boxEls = pathCol.querySelectorAll('.box-item');
       let cards = Array.from(boxEls).map(b => parseBox(b, usedNames)).filter(c => c.title || c.elements.length > 0);
-      cards = dedupeFirstCardTitle(cards, !pathItemText && !!firstLabelText);
+      cards = dedupeFirstCardTitle(cards, !fromPathItem && !!colTitleRaw);
+      if (pathDescr) {
+        cards = [{ title: '', elements: [{ order: 0, type: 'richText', text: '<p>' + pathDescr + '</p>' }], role: 'importer_description' }, ...cards];
+      }
       if (cards.length > 0) columns.push({ title: colTitle, cards });
     });
     if (columns.length > 0) return columns;
