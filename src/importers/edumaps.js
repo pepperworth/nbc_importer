@@ -169,6 +169,7 @@ export function edumapsExportToIntermediate(exportData, sourceUrl) {
       if (card.anchorId) mapped.anchorId = card.anchorId;
       if (card.backgroundColorRaw) mapped.backgroundColorRaw = card.backgroundColorRaw;
       if (card.backgroundColor) mapped.backgroundColor = card.backgroundColor;
+      if (card.role) mapped.role = card.role;
       return mapped;
     }),
   }));
@@ -187,6 +188,8 @@ function edumapsElementToIntermediate(el) {
   switch (el.type) {
     case 'text':
       return { type: 'richText', text: el.content || '', inputFormat: 'richTextCk5' };
+    case 'richText':
+      return { type: 'richText', text: el.text || el.content || '', inputFormat: el.inputFormat || 'richTextCk5' };
     case 'link':
       return { type: 'link', url: el.url || '', title: el.title || '', description: '', imageUrl: '' };
     case 'file':
